@@ -1,0 +1,47 @@
+name: build-bbr3-cloud-kernel
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-bbr3-cloud-kernel:
+    runs-on: ubuntu-latest
+    container: debian:trixie
+
+    steps:
+      - name: 克隆仓库代码
+        uses: actions/checkout@v6
+      - name: 安装编译依赖
+        run: |
+          apt-get update
+          apt-get install -y build-essential bc bison flex libssl-dev libelf-dev zstd kmod cpio dpkg-dev debhelper fakeroot git curl ca-certificates jq xz-utils rsync dwarves python3 linux-source-6.12 linux-config-6.12
+
+          mkdir /build
+          tar xf /usr/src/linux-source-6.12.tar.xz -C /build --strip-components=1
+          xz -dc /usr/src/linux-config-6.12/config.amd64_none_cloud-amd64.xz > /build/.config
+
+          git clone --depth 1 https://gitlab.com/xanmod/linux-patches /linux-patches
+          mv *.patch /linux-patches/eol/linux-6.12.y-xanmod/net/tcp/bbr3/
+      - name: 应用bbr3补丁
+        run: |
+          cd /build
+          echo "TAG=$(make kernelversion)" >> $GITHUB_ENV
+          for file in /linux-patches/eol/linux-6.12.y-xanmod/net/tcp/bbr3/*.patch; do
+            if git apply --check "$file" 2>/dev/null; then
+              git apply "$file"; echo "$file applied successfully."
+            elif patch -p1 --forward --fuzz=1 --no-backup-if-mismatch --dry-run <"$file" >/dev/null 2>&1; then
+              patch -p1 --forward --fuzz=1 --no-backup-if-mismatch <"$file"; echo "$file patched successfully."
+            else echo "$file patched failed!"; exit 1; fi
+          done
+      - name: 编译debian内核
+        run: |
+          cd /build
+          ./scripts/config --set-str LOCALVERSION "+deb13-bbr3-cloud-amd64"
+          make olddefconfig
+          make -j$(nproc) bindeb-pkg
+      - name: 发布到仓库
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ env.TAG }}
+          files: /linux-image-*.deb
+          fail_on_unmatched_files: true
