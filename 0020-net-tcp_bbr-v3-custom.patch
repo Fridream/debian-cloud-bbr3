@@ -31,7 +31,7 @@ index a180fa648..9fef1d92b 100644
  
  /* Estimate bw probing has gone too far if loss rate exceeds this level. */
 -static const u32 bbr_loss_thresh = BBR_UNIT * 2 / 100;  /* 2% loss */
-+static const u32 bbr_loss_thresh = BBR_UNIT;
++static const u32 bbr_loss_thresh = BBR_UNIT * 10 / 100;  /* 10% loss */
  
  /* Slow down for a packet loss recovered by TLP? */
 -static const bool bbr_loss_probe_recovery = true;
